@@ -490,8 +490,8 @@ class NFLMatchupAnalyzer:
         logger.info(f"Creating early season analyzer: {current_year} performance vs {previous_year} baselines")
         return cls(performance_year=current_year, baseline_year=previous_year, min_targets=min_targets)
 
-def main():
-    """Main function for webhook deployment - analyzes current week's actual games"""
+def run_analysis():
+    """Run analysis function - separates logic from main() for flask integration"""
     try:
         # Configuration - can be set via environment variables
         performance_year = int(os.getenv('PERFORMANCE_YEAR', 2025))
@@ -506,8 +506,8 @@ def main():
         )
         
         if not analyzer.data_loaded:
-            logger.error("Failed to load data, exiting")
-            sys.exit(1)
+            logger.error("Failed to load data")
+            return None
         
         # Analyze actual week matchups
         week_num = int(target_week) if target_week else None
@@ -515,40 +515,174 @@ def main():
         
         if not results:
             logger.error("No valid games found")
-            sys.exit(1)
+            return None
         
-        # Output JSON for API consumption
-        json_output = analyzer.generate_json_output(results)
-        print(json_output)
-        
-        # Human-readable summary to stderr for logging
-        current_week = week_num or analyzer.get_current_week()
-        print(f"\n=== WEEK {current_week} NFL MATCHUP ANALYSIS ===", file=sys.stderr)
-        print(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", file=sys.stderr)
-        print("="*50, file=sys.stderr)
-        
-        for game in results:
-            print(f"\n{game['game']} ({game['gameday']})", file=sys.stderr)
-            
-            if game['away_analysis']:
-                away = game['away_analysis']
-                print(f"  {game['away_team']} ({away['qb_name']}): {away['total_comp_edge']:+.1f}% completion edge", file=sys.stderr)
-            
-            if game['home_analysis']:
-                home = game['home_analysis']
-                print(f"  {game['home_team']} ({home['qb_name']}): {home['total_comp_edge']:+.1f}% completion edge", file=sys.stderr)
-        
-        return results
+        return {
+            'results': results,
+            'analyzer': analyzer,
+            'week_num': week_num or analyzer.get_current_week()
+        }
         
     except Exception as e:
-        logger.error(f"Main execution failed: {str(e)}")
-        error_output = {
-            "error": "Analysis failed",
-            "message": str(e),
+        logger.error(f"Analysis execution failed: {str(e)}")
+        return None
+
+def main():
+    """Main function for command-line execution"""
+    analysis_data = run_analysis()
+    
+    if not analysis_data:
+        sys.exit(1)
+    
+    results = analysis_data['results']
+    analyzer = analysis_data['analyzer']
+    current_week = analysis_data['week_num']
+    
+    # Output JSON for API consumption
+    json_output = analyzer.generate_json_output(results)
+    print(json_output)
+    
+    # Human-readable summary to stderr for logging
+    print(f"\n=== WEEK {current_week} NFL MATCHUP ANALYSIS ===", file=sys.stderr)
+    print(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", file=sys.stderr)
+    print("="*50, file=sys.stderr)
+    
+    for game in results:
+        print(f"\n{game['game']} ({game['gameday']})", file=sys.stderr)
+        
+        if game['away_analysis']:
+            away = game['away_analysis']
+            print(f"  {game['away_team']} ({away['qb_name']}): {away['total_comp_edge']:+.1f}% completion edge", file=sys.stderr)
+        
+        if game['home_analysis']:
+            home = game['home_analysis']
+            print(f"  {game['home_team']} ({home['qb_name']}): {home['total_comp_edge']:+.1f}% completion edge", file=sys.stderr)
+    
+    return results
+
+# Flask Integration
+try:
+    from flask import Flask, jsonify, request
+    
+    app = Flask(__name__)
+    
+    @app.route('/analyze', methods=['GET'])
+    def analyze():
+        """Main endpoint to analyze current week's NFL matchups"""
+        try:
+            # Get parameters from query string
+            performance_year = request.args.get('performance_year', '2025')
+            baseline_year = request.args.get('baseline_year', '2024') 
+            min_targets = request.args.get('min_targets', '3')
+            target_week = request.args.get('week')
+            
+            # Set environment variables temporarily
+            original_env = {}
+            env_vars = {
+                'PERFORMANCE_YEAR': performance_year,
+                'BASELINE_YEAR': baseline_year,
+                'MIN_TARGETS': min_targets
+            }
+            if target_week:
+                env_vars['TARGET_WEEK'] = target_week
+            
+            # Store original values and set new ones
+            for key, value in env_vars.items():
+                original_env[key] = os.environ.get(key)
+                os.environ[key] = value
+            
+            try:
+                # Run analysis
+                analysis_data = run_analysis()
+                
+                if not analysis_data:
+                    return jsonify({
+                        "error": "Analysis failed",
+                        "message": "Could not complete analysis",
+                        "timestamp": datetime.now().isoformat()
+                    }), 500
+                
+                # Generate JSON output
+                results = analysis_data['results']
+                analyzer = analysis_data['analyzer']
+                json_output = analyzer.generate_json_output(results)
+                
+                # Parse and return JSON
+                return jsonify(json.loads(json_output))
+                
+            finally:
+                # Restore original environment variables
+                for key, original_value in original_env.items():
+                    if original_value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = original_value
+        
+        except Exception as e:
+            logger.error(f"Error in Flask endpoint: {str(e)}")
+            return jsonify({
+                "error": "Unexpected error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat()
+            }), 500
+    
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        """Health check endpoint"""
+        return jsonify({
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "service": "NFL Matchup Analyzer"
+        })
+    
+    @app.route('/', methods=['GET'])
+    def root():
+        """Root endpoint with API documentation"""
+        return jsonify({
+            "service": "NFL Matchup Analyzer API",
+            "version": "1.0",
+            "endpoints": {
+                "/analyze": {
+                    "method": "GET",
+                    "description": "Analyze current week's NFL matchups",
+                    "parameters": {
+                        "performance_year": "Year to analyze (default: 2025)",
+                        "baseline_year": "Year to use for baselines (default: 2024)",
+                        "min_targets": "Minimum targets for receiver analysis (default: 3)",
+                        "week": "Specific week to analyze (optional, defaults to current week)"
+                    },
+                    "example": "/analyze?performance_year=2025&baseline_year=2024&min_targets=3&week=2"
+                },
+                "/health": {
+                    "method": "GET", 
+                    "description": "Health check endpoint"
+                }
+            },
             "timestamp": datetime.now().isoformat()
-        }
-        print(json.dumps(error_output))
+        })
+    
+    def run_flask_app():
+        """Run Flask application"""
+        port = int(os.environ.get('PORT', 10000))
+        debug = os.environ.get('DEBUG', 'False').lower() == 'true'
+        
+        logger.info(f"Starting NFL Matchup Analyzer API on port {port}")
+        app.run(host='0.0.0.0', port=port, debug=debug)
+
+except ImportError:
+    logger.info("Flask not available - running in CLI mode only")
+    app = None
+    def run_flask_app():
+        logger.error("Flask not installed. Install with: pip install flask")
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    # Check if Flask mode is requested
+    if len(sys.argv) > 1 and sys.argv[1] == '--flask':
+        if app is not None:
+            run_flask_app()
+        else:
+            logger.error("Flask not available. Install with: pip install flask")
+            sys.exit(1)
+    else:
+        main()
