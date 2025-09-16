@@ -568,6 +568,645 @@ try:
     app = Flask(__name__)
     CORS(app)  # Enable CORS for all routes
     
+    @app.route('/dashboard')
+    def dashboard():
+        """Serve the premium NFL prop signals dashboard"""
+        return '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFL Prop Signals Dashboard</title>
+    <style>
+        .webflow-betting-embed {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(180deg, #334155 0%, #1f2937 15%, #1f2937 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        .component-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .component-header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding: 2rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .component-title {
+            font-size: clamp(2rem, 5vw, 4rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, #9ca3af, #ffffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+            margin-bottom: 1rem;
+        }
+
+        .component-subtitle {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #60a5fa;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        .description-text {
+            font-size: 1.125rem;
+            color: #e5e7eb;
+            line-height: 1.7;
+        }
+
+        .refresh-section {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 3rem;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #1e3a8a, #60a5fa);
+            color: #ffffff;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(20px);
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(30, 58, 138, 0.3);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading-state, .error-state {
+            text-align: center;
+            padding: 3rem;
+            font-size: 1.125rem;
+            color: #d1d5db;
+        }
+
+        .error-state {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 12px;
+            color: #fca5a5;
+            margin-bottom: 2rem;
+        }
+
+        .warning-state {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 12px;
+            color: #fbbf24;
+            margin-bottom: 2rem;
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .component-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 3rem;
+            margin-bottom: 4rem;
+        }
+
+        .component-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 3rem;
+            transition: all 0.3s ease;
+        }
+
+        .component-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border-color: rgba(96, 165, 250, 0.3);
+            background: linear-gradient(135deg, rgba(96, 165, 250, 0.05), rgba(59, 130, 246, 0.02));
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .game-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .game-date {
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+
+        .team-section {
+            margin-bottom: 2rem;
+        }
+
+        .team-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .team-name {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #60a5fa;
+        }
+
+        .qb-name {
+            color: #d1d5db;
+            font-size: 0.875rem;
+        }
+
+        .overall-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-box {
+            background: rgba(31, 41, 55, 0.8);
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.125rem;
+            font-weight: 700;
+        }
+
+        .stat-positive { color: #10b981; }
+        .stat-negative { color: #ef4444; }
+        .stat-neutral { color: #d1d5db; }
+
+        .opportunities-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .opportunity-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .opportunity-card:hover {
+            border-color: #60a5fa;
+            background: rgba(96, 165, 250, 0.05);
+        }
+
+        .opportunity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .location-badge {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 20px;
+        }
+
+        .location-left {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+
+        .location-middle {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #f59e0b;
+        }
+
+        .location-right {
+            background: rgba(96, 165, 250, 0.1);
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            color: #60a5fa;
+        }
+
+        .volume-text {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            font-weight: 600;
+        }
+
+        .mini-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .mini-stat {
+            text-align: center;
+        }
+
+        .mini-stat-label {
+            font-size: 0.625rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .mini-stat-value {
+            font-size: 0.875rem;
+            font-weight: 700;
+        }
+
+        .top-receiver {
+            background: rgba(96, 165, 250, 0.1);
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+
+        .receiver-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .receiver-name {
+            font-weight: 700;
+            color: #60a5fa;
+            font-size: 0.875rem;
+        }
+
+        .receiver-stats {
+            display: flex;
+            gap: 0.75rem;
+            font-size: 0.75rem;
+            color: #d1d5db;
+        }
+
+        .metadata-section {
+            background: rgba(55, 65, 81, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            color: #d1d5db;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        .metadata-section strong {
+            color: #ffffff;
+        }
+
+        @media (max-width: 768px) {
+            .component-container {
+                padding: 1rem;
+            }
+            
+            .component-card {
+                padding: 2rem;
+                border-radius: 20px;
+            }
+            
+            .component-grid {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+            
+            .opportunities-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .overall-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .game-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .component-card {
+                padding: 1.5rem;
+            }
+            
+            .component-title {
+                font-size: 2rem;
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate {
+            animation: fadeInUp 1s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="webflow-betting-embed">
+        <div class="component-container">
+            <div class="component-header">
+                <h1 class="component-title">NFL Prop Signals</h1>
+                <p class="component-subtitle">Data-Driven Insights</p>
+                <p class="description-text">Location-based matchup analysis for informed prop betting decisions</p>
+            </div>
+
+            <div class="refresh-section">
+                <button class="refresh-btn" onclick="loadData()">Refresh Analysis</button>
+            </div>
+
+            <div id="loading" class="loading-state">Loading NFL prop signals...</div>
+            <div id="error" class="error-state" style="display: none;"></div>
+            <div id="warning" class="warning-state" style="display: none;"></div>
+            <div id="content"></div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+            
+            async function loadData() {
+                const loadingEl = document.getElementById('loading');
+                const errorEl = document.getElementById('error');
+                const warningEl = document.getElementById('warning');
+                const contentEl = document.getElementById('content');
+                const refreshBtn = document.querySelector('.refresh-btn');
+                
+                loadingEl.style.display = 'block';
+                errorEl.style.display = 'none';
+                warningEl.style.display = 'none';
+                contentEl.innerHTML = '';
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = 'Loading...';
+                
+                const API_URL = '/analyze';
+                
+                try {
+                    console.log('Loading NFL prop analysis...');
+                    const response = await fetch(API_URL);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Successfully loaded analysis data');
+                    displayData(data);
+                    loadingEl.style.display = 'none';
+                    
+                } catch (error) {
+                    console.error('Failed to load analysis:', error);
+                    errorEl.textContent = `Analysis temporarily unavailable: ${error.message}`;
+                    errorEl.style.display = 'block';
+                    loadingEl.style.display = 'none';
+                    
+                } finally {
+                    refreshBtn.disabled = false;
+                    refreshBtn.textContent = 'Refresh Analysis';
+                }
+            }
+            
+            function getEdgeClass(value) {
+                if (value > 5) return 'stat-positive';
+                if (value < -5) return 'stat-negative';
+                return 'stat-neutral';
+            }
+            
+            function formatEdge(value) {
+                return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
+            }
+            
+            function displayData(data) {
+                const contentEl = document.getElementById('content');
+                
+                if (!data.games || data.games.length === 0) {
+                    contentEl.innerHTML = '<div class="error-state">No game analysis available</div>';
+                    return;
+                }
+                
+                const gamesHtml = data.games.map(game => `
+                    <div class="component-card animate">
+                        <div class="game-header">
+                            <div class="game-title">${game.game}</div>
+                            <div class="game-date">${new Date(game.gameday).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                month: 'short', 
+                                day: 'numeric' 
+                            })}</div>
+                        </div>
+                        
+                        <div class="team-section">
+                            <div class="team-header">
+                                <span class="team-name">${game.away_team}</span>
+                                <span class="qb-name">${game.away_analysis?.qb_name || 'Unknown QB'}</span>
+                            </div>
+                            
+                            ${game.away_analysis ? `
+                                <div class="overall-stats">
+                                    <div class="stat-box">
+                                        <div class="stat-label">Completion Edge</div>
+                                        <div class="stat-value ${getEdgeClass(game.away_analysis.total_comp_edge)}">${formatEdge(game.away_analysis.total_comp_edge)}%</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-label">Explosive Edge</div>
+                                        <div class="stat-value ${getEdgeClass(game.away_analysis.total_explosive_edge)}">${formatEdge(game.away_analysis.total_explosive_edge)}%</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-label">YPA Edge</div>
+                                        <div class="stat-value ${getEdgeClass(game.away_analysis.total_ypa_edge)}">${formatEdge(game.away_analysis.total_ypa_edge)}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="opportunities-grid">
+                                    ${game.away_analysis.opportunities.map(opp => `
+                                        <div class="opportunity-card">
+                                            <div class="opportunity-header">
+                                                <span class="location-badge location-${opp.location}">${opp.location}</span>
+                                                <span class="volume-text">${opp.volume.toFixed(1)}% vol</span>
+                                            </div>
+                                            
+                                            <div class="mini-stats">
+                                                <div class="mini-stat">
+                                                    <div class="mini-stat-label">Comp</div>
+                                                    <div class="mini-stat-value ${getEdgeClass(opp.comp_edge)}">${formatEdge(opp.comp_edge)}%</div>
+                                                </div>
+                                                <div class="mini-stat">
+                                                    <div class="mini-stat-label">Exp</div>
+                                                    <div class="mini-stat-value ${getEdgeClass(opp.explosive_edge)}">${formatEdge(opp.explosive_edge)}%</div>
+                                                </div>
+                                                <div class="mini-stat">
+                                                    <div class="mini-stat-label">YPA</div>
+                                                    <div class="mini-stat-value ${getEdgeClass(opp.ypa_edge)}">${formatEdge(opp.ypa_edge)}</div>
+                                                </div>
+                                            </div>
+                                            
+                                            ${opp.top_receiver ? `
+                                                <div class="top-receiver">
+                                                    <div class="receiver-info">
+                                                        <span class="receiver-name">${opp.top_receiver.name}</span>
+                                                        <div class="receiver-stats">
+                                                            <span>Edge: ${formatEdge(opp.top_receiver.edge)}%</span>
+                                                            <span>Targets: ${opp.top_receiver.targets}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<div class="stat-neutral">Analysis unavailable</div>'}
+                        </div>
+                        
+                        <div class="team-section">
+                            <div class="team-header">
+                                <span class="team-name">${game.home_team}</span>
+                                <span class="qb-name">${game.home_analysis?.qb_name || 'Unknown QB'}</span>
+                            </div>
+                            
+                            ${game.home_analysis ? `
+                                <div class="overall-stats">
+                                    <div class="stat-box">
+                                        <div class="stat-label">Completion Edge</div>
+                                        <div class="stat-value ${getEdgeClass(game.home_analysis.total_comp_edge)}">${formatEdge(game.home_analysis.total_comp_edge)}%</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-label">Explosive Edge</div>
+                                        <div class="stat-value ${getEdgeClass(game.home_analysis.total_explosive_edge)}">${formatEdge(game.home_analysis.total_explosive_edge)}%</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-label">YPA Edge</div>
+                                        <div class="stat-value ${getEdgeClass(game.home_analysis.total_ypa_edge)}">${formatEdge(game.home_analysis.total_ypa_edge)}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="opportunities-grid">
+                                    ${game.home_analysis.opportunities.map(opp => `
+                                        <div class="opportunity-card">
+                                            <div class="opportunity-header">
+                                                <span class="location-badge location-${opp.location}">${opp.location}</span>
+                                                <span class="volume-text">${opp.volume.toFixed(1)}% vol</span>
+                                            </div>
+                                            
+                                            <div class="mini-stats">
+                                                <div class="mini-stat">
+                                                    <div class="mini-stat-label">Comp</div>
+                                                    <div class="mini-stat-value ${getEdgeClass(opp.comp_edge)}">${formatEdge(opp.comp_edge)}%</div>
+                                                </div>
+                                                <div class="mini-stat">
+                                                    <div class="mini-stat-label">Exp</div>
+                                                    <div class="mini-stat-value ${getEdgeClass(opp.explosive_edge)}">${formatEdge(opp.explosive_edge)}%</div>
+                                                </div>
+                                                <div class="mini-stat">
+                                                    <div class="mini-stat-label">YPA</div>
+                                                    <div class="mini-stat-value ${getEdgeClass(opp.ypa_edge)}">${formatEdge(opp.ypa_edge)}</div>
+                                                </div>
+                                            </div>
+                                            
+                                            ${opp.top_receiver ? `
+                                                <div class="top-receiver">
+                                                    <div class="receiver-info">
+                                                        <span class="receiver-name">${opp.top_receiver.name}</span>
+                                                        <div class="receiver-stats">
+                                                            <span>Edge: ${formatEdge(opp.top_receiver.edge)}%</span>
+                                                            <span>Targets: ${opp.top_receiver.targets}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<div class="stat-neutral">Analysis unavailable</div>'}
+                        </div>
+                    </div>
+                `).join('');
+                
+                const metadataHtml = data.metadata ? `
+                    <div class="metadata-section animate">
+                        <p><strong>Analysis Generated:</strong> ${new Date(data.metadata.generated_at).toLocaleString()}</p>
+                        <p style="margin-top: 1rem;"><strong>Baseline Year:</strong> ${data.metadata.baseline_year} | <strong>Performance Year:</strong> ${data.metadata.performance_year} | <strong>Games Analyzed:</strong> ${data.metadata.total_games}</p>
+                        <p style="margin-top: 1rem; font-size: 0.75rem; font-style: italic; color: #9ca3af;">${data.metadata.disclaimer}</p>
+                    </div>
+                ` : '';
+                
+                contentEl.innerHTML = `
+                    <div class="component-grid">${gamesHtml}</div>
+                    ${metadataHtml}
+                `;
+                
+                // Add staggered animation
+                setTimeout(() => {
+                    document.querySelectorAll('.animate').forEach((el, index) => {
+                        el.style.animationDelay = `${index * 0.2}s`;
+                    });
+                }, 100);
+            }
+            
+            // Make loadData globally available
+            window.loadData = loadData;
+            
+            // Load data when page loads
+            document.addEventListener('DOMContentLoaded', loadData);
+        })();
+    </script>
+</body>
+</html>'''
+    
     @app.route('/analyze', methods=['GET'])
     def analyze():
         """Main endpoint to analyze current week's NFL matchups"""
@@ -644,6 +1283,10 @@ try:
             "service": "NFL Matchup Analyzer API",
             "version": "1.0",
             "endpoints": {
+                "/dashboard": {
+                    "method": "GET",
+                    "description": "Premium NFL prop signals dashboard"
+                },
                 "/analyze": {
                     "method": "GET",
                     "description": "Analyze current week's NFL matchups",
